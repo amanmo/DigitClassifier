@@ -29,23 +29,15 @@ class DigitClassifier:
 
         #Setting hyperparameters
         self.inputs = 784
-        self.hidden_units_1 = 256
-        # self.hidden_units_2 = 64
+        self.hidden_units = 90
         self.outputs = 10
         self.epochs = 100
         self.batch_size = 1000
-        self.learning_rate = 0.0025
+        self.learning_rate = 0.005
 
         #Initializing Weights
-        # self.weights_1 = pd.DataFrame(np.random.uniform(-2, 2, (self.inputs + 1, self.hidden_units_1)))         #+1 for bias
-        # self.weights_2 = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units_1, self.hidden_units_2)))
-        # self.weights_out = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units_2, self.outputs)))
-
-
-        self.weights_1 = pd.DataFrame(np.random.uniform(-2, 2, (self.inputs + 1, self.hidden_units_1)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units_1)))
-        # self.weights_2 = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units_1, self.hidden_units_2)) * np.sqrt(1/(self.hidden_units_1 + self.hidden_units_2)))
-        self.weights_out = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units_1, self.outputs)) * np.sqrt(1/(self.hidden_units_1 + self.outputs)))
-        # self.weights_out = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units_2, self.outputs)) * np.sqrt(1/(self.hidden_units_2 + self.outputs)))
+        self.weights_hidden = pd.DataFrame(np.random.uniform(-2, 2, (self.inputs + 1, self.hidden_units)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units)))       # +1 for bias
+        self.weights_out = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units, self.outputs)) * np.sqrt(1/(self.hidden_units + self.outputs)))
 
         print('Neural Network Initialized')
 
@@ -59,7 +51,6 @@ class DigitClassifier:
 
         self.train_data.columns = [i for i in range(self.inputs)] + ['Label']
         self.train_data.applymap(int)
-        self.train_data = self.train_data[:10000]                                   #remove
         print('Training Data Imported')
 
         #Importing testing data
@@ -70,62 +61,47 @@ class DigitClassifier:
         self.test_data.applymap(int)
         print('Testing Data Imported')
 
-    def update_weights(self, update_output, update_1):
-    # def update_weights(self, update_output, update_2, update_1):
+    def update_weights(self, update_output, update_hidden):
         'Function to update weights'
 
+        update_output = update_output.fillna(0)                         #make sure NA's dont occur during real testing
+        update_hidden = update_hidden.fillna(0)
         self.weights_out -= self.learning_rate * update_output
-        # self.weights_2 -= self.learning_rate * update_2
-        self.weights_1 -= self.learning_rate * update_1
+        self.weights_hidden -= self.learning_rate * update_hidden
 
     def backPropagate(self, labels, softmax_output, output_wx, activated_first_wx, first_wx, data):
-    # def backPropagate(self, labels, softmax_output, output_wx, activated_second_wx, second_wx, activated_first_wx, first_wx, data):
         'Function to back propagate error and adjust weights'
 
-        cross_entropy_loss = -labels * np.log(softmax_output)           #visualize or remove
+        # cross_entropy_loss = -labels * np.log(softmax_output)           #visualize or remove
 
         #Output Layer Error
         error_output = (softmax_output - labels) * derivativeSoftmax(output_wx)
         update_output = activated_first_wx.T.dot(error_output)
-        # update_output = activated_second_wx.T.dot(error_output)
 
-        # #Second Layer Error
-        # error_2 = ((self.weights_out).dot(error_output.T)).T * derivativeSigmoid(second_wx)
-        # update_2 = activated_first_wx.T.dot(error_2)
+        #Hidden Layer Error
+        error_hidden = ((self.weights_out).dot(error_output.T)).T * derivativeSigmoid(first_wx)
+        update_hidden = data.T.dot(error_hidden)
 
-        #First Layer Error
-        # error_1 = ((self.weights_2).dot(error_2.T)).T * derivativeSigmoid(first_wx)
-        error_1 = ((self.weights_out).dot(error_output.T)).T * derivativeSigmoid(first_wx)
-        update_1 = data.T.dot(error_1)
-
-        self.update_weights(update_output, update_1)
-        # self.update_weights(update_output, update_2, update_1)
+        self.update_weights(update_output, update_hidden)
 
     def feedForward(self, batch, predict = True):
         'Function to compute the output at each layer'
 
-        data = batch.loc[:, batch.columns != 'Label']
-        data[784] = [1 for _ in range(len(batch.index))]        #adding bias node to input layer
+        data = batch.loc[:, batch.columns != 'Label'] if not predict else batch
+        data[784] = [1 for _ in range(batch.shape[0])]        #adding bias node to input layer
 
+        #One-hot encoding output
         if not predict:
-            #One-hot encoding output
-            labels = np.zeros((self.batch_size, 10))
-            rows  = range(self.batch_size)
-            labels[rows, batch['Label']] = 1
+            labels = pd.get_dummies(batch['Label'])
 
         #1st layer
-        first_wx = data.dot(self.weights_1)                     #multiply by weights
+        first_wx = data.dot(self.weights_hidden)                     #multiply by weights
         activated_first_wx = first_wx.applymap(expit)           #pass through activation function
 
-        #Add bias to second and output layers?
-
-        # #2nd layer
-        # second_wx = activated_first_wx.dot(self.weights_2)      #multiply by weights
-        # activated_second_wx = second_wx.applymap(expit)         #pass through activation function
+        #Add bias to output layer?
 
         #Output layer
-        output_wx = activated_first_wx.dot(self.weights_out)   #multiply by weights
-        # output_wx = activated_second_wx.dot(self.weights_out)   #multiply by weights
+        output_wx = activated_first_wx.dot(self.weights_out)    #multiply by weights
         softmax_output = output_wx.apply(softmax, axis=1)       #pass through activation function
 
         final_output = softmax_output.idxmax(axis=1)
@@ -134,18 +110,14 @@ class DigitClassifier:
             return final_output
         else:
             accuracy = (final_output==batch['Label']).mean()
-            # if accuracy == 0:
-            #     print('Accuracy == 0 Error')
-            #     exit()
             self.backPropagate(labels, softmax_output, output_wx, activated_first_wx, first_wx, data)
-            # self.backPropagate(labels, softmax_output, output_wx, activated_second_wx, second_wx, activated_first_wx, first_wx, data)
             return accuracy
 
     def train(self):
         'Function to train the network using training data'
 
         shuffled_train_data = self.train_data.sample(frac=1)
-        batches = np.array_split(shuffled_train_data, (self.train_data.shape[0] + 1) / self.batch_size)
+        batches = np.array_split(shuffled_train_data, (self.train_data.shape[0] + 1) / self.batch_size) if self.train_data.shape[0] > self.batch_size else [shuffled_train_data]
         print('Training Data Segmented')
 
         print('Training Started')
@@ -160,8 +132,8 @@ class DigitClassifier:
 
         print('Generating Test Data Labels')
 
-        output = self.feedForward(self.test_data)                                             #Feed Test Data to Neural Network
-        pd.DataFrame.to_csv(output, 'test_predictions.csv', index=False, header=False)        #Saving Output to CSV
+        output = self.feedForward(self.test_data)                                          #Feed Test Data to Neural Network
+        pd.Series.to_csv(output, 'test_predictions.csv', index=False, header=False)        #Saving Output to CSV
 
         print('Output File Generated')
 
