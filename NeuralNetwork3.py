@@ -29,15 +29,18 @@ class DigitClassifier:
 
         #Setting hyperparameters
         self.inputs = 784
-        self.hidden_units = 90
+        self.hidden_units = 128
         self.outputs = 10
         self.epochs = 100
         self.batch_size = 1000
-        self.learning_rate = 0.005
+        self.learning_rate = 0.008
+        self.momentum = 0.7
 
         #Initializing Weights
         self.weights_hidden = pd.DataFrame(np.random.uniform(-2, 2, (self.inputs + 1, self.hidden_units)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units)))       # +1 for bias
-        self.weights_out = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units, self.outputs)) * np.sqrt(1/(self.hidden_units + self.outputs)))
+        self.weights_output = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units, self.outputs)) * np.sqrt(1/(self.hidden_units + self.outputs)))
+        self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units))
+        self.momentum_output = np.zeros((self.hidden_units, self.outputs))
 
         print('Neural Network Initialized')
 
@@ -66,8 +69,10 @@ class DigitClassifier:
 
         update_output = update_output.fillna(0)                         #make sure NA's dont occur during real testing
         update_hidden = update_hidden.fillna(0)
-        self.weights_out -= self.learning_rate * update_output
-        self.weights_hidden -= self.learning_rate * update_hidden
+        self.weights_output -= (self.learning_rate * update_output) + (self.momentum * self.momentum_output)
+        self.weights_hidden -= (self.learning_rate * update_hidden) + (self.momentum * self.momentum_hidden)
+        self.momentum_output = (self.learning_rate * update_output) + (self.momentum * self.momentum_output)
+        self.momentum_hidden = (self.learning_rate * update_hidden) + (self.momentum * self.momentum_hidden)
 
     def backPropagate(self, labels, softmax_output, output_wx, activated_first_wx, first_wx, data):
         'Function to back propagate error and adjust weights'
@@ -79,7 +84,7 @@ class DigitClassifier:
         update_output = activated_first_wx.T.dot(error_output)
 
         #Hidden Layer Error
-        error_hidden = ((self.weights_out).dot(error_output.T)).T * derivativeSigmoid(first_wx)
+        error_hidden = ((self.weights_output).dot(error_output.T)).T * derivativeSigmoid(first_wx)
         update_hidden = data.T.dot(error_hidden)
 
         self.update_weights(update_output, update_hidden)
@@ -88,21 +93,21 @@ class DigitClassifier:
         'Function to compute the output at each layer'
 
         data = batch.loc[:, batch.columns != 'Label'] if not predict else batch
-        data[784] = [1 for _ in range(batch.shape[0])]        #adding bias node to input layer
+        data[784] = [1 for _ in range(batch.shape[0])]              #adding bias node to input layer
 
         #One-hot encoding output
         if not predict:
             labels = pd.get_dummies(batch['Label'])
 
         #1st layer
-        first_wx = data.dot(self.weights_hidden)                     #multiply by weights
-        activated_first_wx = first_wx.applymap(expit)           #pass through activation function
+        first_wx = data.dot(self.weights_hidden)                    #multiply by weights
+        activated_first_wx = first_wx.applymap(expit)               #pass through activation function
 
         #Add bias to output layer?
 
         #Output layer
-        output_wx = activated_first_wx.dot(self.weights_out)    #multiply by weights
-        softmax_output = output_wx.apply(softmax, axis=1)       #pass through activation function
+        output_wx = activated_first_wx.dot(self.weights_output)     #multiply by weights
+        softmax_output = output_wx.apply(softmax, axis=1)           #pass through activation function
 
         final_output = softmax_output.idxmax(axis=1)
 
@@ -122,6 +127,15 @@ class DigitClassifier:
 
         print('Training Started')
         for epoch in range(self.epochs):
+
+            #Dynamic learning rate and momentum
+            if epoch == 30:
+                self.learning_rate = 0.004
+                self.momentum = 0.3
+            elif epoch == 60:
+                self.learning_rate = 0.002
+                self.momentum = 0
+                
             for batch in range(len(batches)):
                 acc = self.feedForward(batches[batch], predict=False)
             print(f'Epoch {epoch + 1}: {acc * 100}%')
