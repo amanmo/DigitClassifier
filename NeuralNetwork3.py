@@ -32,7 +32,7 @@ class DigitClassifier:
         self.hidden_units = 128
         self.outputs = 10
         self.epochs = 100
-        self.batch_size = 1000
+        self.batch_size = 2000
         self.learning_rate = 0.008
         self.momentum = 0.7
 
@@ -54,6 +54,7 @@ class DigitClassifier:
 
         self.train_data.columns = [i for i in range(self.inputs)] + ['Label']
         self.train_data.applymap(int)
+        # self.train_data = self.train_data[:10000]
         print('Training Data Imported')
 
         #Importing testing data
@@ -135,10 +136,11 @@ class DigitClassifier:
             elif epoch == 60:
                 self.learning_rate = 0.002
                 self.momentum = 0
-                
+
+            accuracies = []
             for batch in range(len(batches)):
-                acc = self.feedForward(batches[batch], predict=False)
-            print(f'Epoch {epoch + 1}: {acc * 100}%')
+                accuracies += [self.feedForward(batches[batch], predict=False)]
+            print(f'Epoch {epoch + 1}: {sum(accuracies)/len(accuracies) * 100}%')
         print('Training Finished')
 
     def generateOutput(self):
