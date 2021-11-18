@@ -31,16 +31,16 @@ class DigitClassifier:
         self.inputs = 784
         self.hidden_units = 128
         self.outputs = 10
-        self.epochs = 100
+        self.epochs = 50
         self.batch_size = 2000
-        self.learning_rate = 0.008
-        self.momentum = 0.7
+        self.learning_rate = 0.01
+        self.momentum = 0.8
 
         #Initializing Weights
-        self.weights_hidden = pd.DataFrame(np.random.uniform(-2, 2, (self.inputs + 1, self.hidden_units)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units)))       # +1 for bias
-        self.weights_output = pd.DataFrame(np.random.uniform(-2, 2, (self.hidden_units, self.outputs)) * np.sqrt(1/(self.hidden_units + self.outputs)))
-        self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units))
-        self.momentum_output = np.zeros((self.hidden_units, self.outputs))
+        self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units + 1)))       # +1 for bias
+        self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) * np.sqrt(1/(self.hidden_units + 1 + self.outputs)))
+        self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
+        self.momentum_output = np.zeros((self.hidden_units + 1, self.outputs))
 
         print('Neural Network Initialized')
 
@@ -94,21 +94,20 @@ class DigitClassifier:
         'Function to compute the output at each layer'
 
         data = batch.loc[:, batch.columns != 'Label'] if not predict else batch
-        data[784] = [1 for _ in range(batch.shape[0])]              #adding bias node to input layer
+        data[784] = [1 for _ in range(batch.shape[0])]                               #adding bias node to input layer
 
         #One-hot encoding output
         if not predict:
             labels = pd.get_dummies(batch['Label'])
 
         #1st layer
-        first_wx = data.dot(self.weights_hidden)                    #multiply by weights
-        activated_first_wx = first_wx.applymap(expit)               #pass through activation function
-
-        #Add bias to output layer?
+        first_wx = data.dot(self.weights_hidden)                                     #multiply by weights
+        activated_first_wx = first_wx.applymap(expit)                                #pass through activation function
+        activated_first_wx[self.hidden_units] = [1 for _ in range(batch.shape[0])]   #adding bias node to hidden layer
 
         #Output layer
-        output_wx = activated_first_wx.dot(self.weights_output)     #multiply by weights
-        softmax_output = output_wx.apply(softmax, axis=1)           #pass through activation function
+        output_wx = activated_first_wx.dot(self.weights_output)                      #multiply by weights
+        softmax_output = output_wx.apply(softmax, axis=1)                            #pass through activation function
 
         final_output = softmax_output.idxmax(axis=1)
 
@@ -130,11 +129,11 @@ class DigitClassifier:
         for epoch in range(self.epochs):
 
             #Dynamic learning rate and momentum
-            if epoch == 30:
-                self.learning_rate = 0.004
+            if epoch == 35:     #25
+                self.learning_rate = 0.007
                 self.momentum = 0.3
-            elif epoch == 60:
-                self.learning_rate = 0.002
+            elif epoch == 45:       #35
+                self.learning_rate = 0.005
                 self.momentum = 0
 
             accuracies = []
