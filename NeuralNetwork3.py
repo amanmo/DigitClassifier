@@ -33,7 +33,7 @@ class DigitClassifier:
         self.outputs = 10
         self.epochs = 50
         self.batch_size = 2000
-        self.learning_rate = 0.01
+        self.learning_rate = 0.02
         self.momentum = 0.8
 
         #Initializing Weights
@@ -70,10 +70,10 @@ class DigitClassifier:
 
         update_output = update_output.fillna(0)                         #make sure NA's dont occur during real testing
         update_hidden = update_hidden.fillna(0)
-        self.weights_output -= (self.learning_rate * update_output) + (self.momentum * self.momentum_output)
-        self.weights_hidden -= (self.learning_rate * update_hidden) + (self.momentum * self.momentum_hidden)
-        self.momentum_output = (self.learning_rate * update_output) + (self.momentum * self.momentum_output)
-        self.momentum_hidden = (self.learning_rate * update_hidden) + (self.momentum * self.momentum_hidden)
+        self.momentum_output = (self.momentum * self.momentum_output) + (1 - self.momentum) * update_output
+        self.momentum_hidden = (self.momentum * self.momentum_hidden) + (1 - self.momentum) * update_hidden
+        self.weights_output -= self.learning_rate * self.momentum_output
+        self.weights_hidden -= self.learning_rate * self.momentum_hidden
 
     def backPropagate(self, labels, softmax_output, output_wx, activated_first_wx, first_wx, data):
         'Function to back propagate error and adjust weights'
@@ -128,18 +128,12 @@ class DigitClassifier:
         print('Training Started')
         for epoch in range(self.epochs):
 
-            #Dynamic learning rate and momentum
-            if epoch == 35:     #25
-                self.learning_rate = 0.007
-                self.momentum = 0.3
-            elif epoch == 45:       #35
-                self.learning_rate = 0.005
-                self.momentum = 0
-
             accuracies = []
             for batch in range(len(batches)):
                 accuracies += [self.feedForward(batches[batch], predict=False)]
-            print(f'Epoch {epoch + 1}: {sum(accuracies)/len(accuracies) * 100}%')
+            avg_accuracy = sum(accuracies)/len(accuracies) * 100
+            print(f'Epoch {epoch + 1}: {avg_accuracy}%')
+
         print('Training Finished')
 
     def generateOutput(self):
