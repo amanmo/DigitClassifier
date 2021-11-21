@@ -33,16 +33,19 @@ class DigitClassifier:
         self.outputs = 10
         self.epochs = 50
         self.batch_size = 2000
-        self.learning_rate = 0.01
-        self.momentum = 0.9
+        self.learning_rate = 0.0001       #0.01 (momentum)
+        # self.momentum = 0.9
+        self.rms = 0.999
 
         #Initializing Weights
         # self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units + 1)))       # +1 for bias
         # self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) * np.sqrt(1/(self.hidden_units + 1 + self.outputs)))
         self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) / np.sqrt((self.inputs + 1) * (self.hidden_units + 1)))       # +1 for bias
         self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) / np.sqrt((self.hidden_units + 1) * self.outputs))
-        self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
-        self.momentum_output = np.zeros((self.hidden_units + 1, self.outputs))
+        # self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
+        # self.momentum_output = np.zeros((self.hidden_units + 1, self.outputs))
+        self.rms_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
+        self.rms_output = np.zeros((self.hidden_units + 1, self.outputs))
 
         print('Neural Network Initialized')
 
@@ -56,7 +59,8 @@ class DigitClassifier:
 
         self.train_data.columns = [i for i in range(self.inputs)] + ['Label']
         self.train_data.applymap(int)
-        # self.train_data = self.train_data[:10000]
+        if self.train_data.shape[0] > 10000:
+            self.train_data = self.train_data.sample(frac=1)[:10000]
         print('Training Data Imported')
 
         #Importing testing data
@@ -72,10 +76,14 @@ class DigitClassifier:
 
         update_output = update_output.fillna(0)                         #make sure NA's dont occur during real testing
         update_hidden = update_hidden.fillna(0)
-        self.momentum_output = (self.momentum * self.momentum_output) + (1 - self.momentum) * update_output
-        self.momentum_hidden = (self.momentum * self.momentum_hidden) + (1 - self.momentum) * update_hidden
-        self.weights_output -= self.learning_rate * self.momentum_output
-        self.weights_hidden -= self.learning_rate * self.momentum_hidden
+        # self.momentum_output = (self.momentum * self.momentum_output) + (1 - self.momentum) * update_output
+        # self.momentum_hidden = (self.momentum * self.momentum_hidden) + (1 - self.momentum) * update_hidden
+        self.rms_output = (self.rms * self.rms_output) + ((1 - self.rms) * update_output**2)
+        self.rms_hidden = (self.rms * self.rms_hidden) + ((1 - self.rms) * update_hidden**2)
+        # self.weights_output -= self.learning_rate * self.momentum_output
+        # self.weights_hidden -= self.learning_rate * self.momentum_hidden
+        self.weights_output -= self.learning_rate * (update_output / (np.sqrt(self.rms_output) + 1e-8))
+        self.weights_hidden -= self.learning_rate * (update_hidden / (np.sqrt(self.rms_hidden) + 1e-8))
 
     def backPropagate(self, labels, softmax_output, output_wx, activated_first_wx, first_wx, data):
         'Function to back propagate error and adjust weights'
@@ -139,11 +147,11 @@ class DigitClassifier:
             print(f'Epoch {epoch + 1}: {avg_accuracy}%')
 
             #Early Stopping
-            avg_accuracies += [avg_accuracy]
-            if len(avg_accuracies) > 10:
-                x, y, z = avg_accuracies[-1], avg_accuracies[-2], avg_accuracies[-3]
-                if x > 93 and y > 93 and z > 93:
-                    break
+            # avg_accuracies += [avg_accuracy]
+            # if len(avg_accuracies) > 10:
+            #     x, y, z = avg_accuracies[-1], avg_accuracies[-2], avg_accuracies[-3]
+            #     if x > 93 and y > 93 and z > 93:
+            #         break
 
         print('Training Finished')
 
