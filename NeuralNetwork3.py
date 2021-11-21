@@ -33,12 +33,14 @@ class DigitClassifier:
         self.outputs = 10
         self.epochs = 50
         self.batch_size = 2000
-        self.learning_rate = 0.02
-        self.momentum = 0.8
+        self.learning_rate = 0.01
+        self.momentum = 0.9
 
         #Initializing Weights
-        self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units + 1)))       # +1 for bias
-        self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) * np.sqrt(1/(self.hidden_units + 1 + self.outputs)))
+        # self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units + 1)))       # +1 for bias
+        # self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) * np.sqrt(1/(self.hidden_units + 1 + self.outputs)))
+        self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) / np.sqrt((self.inputs + 1) * (self.hidden_units + 1)))       # +1 for bias
+        self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) / np.sqrt((self.hidden_units + 1) * self.outputs))
         self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
         self.momentum_output = np.zeros((self.hidden_units + 1, self.outputs))
 
@@ -125,6 +127,8 @@ class DigitClassifier:
         batches = np.array_split(shuffled_train_data, (self.train_data.shape[0] + 1) / self.batch_size) if self.train_data.shape[0] > self.batch_size else [shuffled_train_data]
         print('Training Data Segmented')
 
+        avg_accuracies = []
+        
         print('Training Started')
         for epoch in range(self.epochs):
 
@@ -133,6 +137,13 @@ class DigitClassifier:
                 accuracies += [self.feedForward(batches[batch], predict=False)]
             avg_accuracy = sum(accuracies)/len(accuracies) * 100
             print(f'Epoch {epoch + 1}: {avg_accuracy}%')
+
+            #Early Stopping
+            avg_accuracies += [avg_accuracy]
+            if len(avg_accuracies) > 10:
+                x, y, z = avg_accuracies[-1], avg_accuracies[-2], avg_accuracies[-3]
+                if x > 93 and y > 93 and z > 93:
+                    break
 
         print('Training Finished')
 
