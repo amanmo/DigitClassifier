@@ -33,17 +33,15 @@ class DigitClassifier:
         self.outputs = 10
         self.epochs = 50
         self.batch_size = 2000
-        self.learning_rate = 0.0001       #0.01 (momentum)
-        # self.momentum = 0.9
+        self.learning_rate = 0.001               #0.0001(rmsprop)       #0.01 (momentum)
+        self.momentum = 0.9
         self.rms = 0.999
 
         #Initializing Weights
-        # self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) * np.sqrt(1/(self.inputs + 1 + self.hidden_units + 1)))       # +1 for bias
-        # self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) * np.sqrt(1/(self.hidden_units + 1 + self.outputs)))
         self.weights_hidden = pd.DataFrame(np.random.uniform(-1, 1, (self.inputs + 1, self.hidden_units + 1)) / np.sqrt((self.inputs + 1) * (self.hidden_units + 1)))       # +1 for bias
         self.weights_output = pd.DataFrame(np.random.uniform(-1, 1, (self.hidden_units + 1, self.outputs)) / np.sqrt((self.hidden_units + 1) * self.outputs))
-        # self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
-        # self.momentum_output = np.zeros((self.hidden_units + 1, self.outputs))
+        self.momentum_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
+        self.momentum_output = np.zeros((self.hidden_units + 1, self.outputs))
         self.rms_hidden = np.zeros((self.inputs + 1, self.hidden_units + 1))
         self.rms_output = np.zeros((self.hidden_units + 1, self.outputs))
 
@@ -71,21 +69,29 @@ class DigitClassifier:
         self.test_data.applymap(int)
         print('Testing Data Imported')
 
-    def update_weights(self, update_output, update_hidden):
+    def update_weights(self, update_output, update_hidden, epoch):
         'Function to update weights'
 
-        update_output = update_output.fillna(0)                         #make sure NA's dont occur during real testing
+        update_output = update_output.fillna(0)
         update_hidden = update_hidden.fillna(0)
-        # self.momentum_output = (self.momentum * self.momentum_output) + (1 - self.momentum) * update_output
-        # self.momentum_hidden = (self.momentum * self.momentum_hidden) + (1 - self.momentum) * update_hidden
+
+        #Momentum Terms
+        self.momentum_output = (self.momentum * self.momentum_output) + (1 - self.momentum) * update_output
+        self.momentum_hidden = (self.momentum * self.momentum_hidden) + (1 - self.momentum) * update_hidden
+        corrected_momentum_output = self.momentum_output / (1 - (self.momentum ** epoch))
+        corrected_momentum_hidden = self.momentum_hidden / (1 - (self.momentum ** epoch))
+
+        #RMS Prop Terms
         self.rms_output = (self.rms * self.rms_output) + ((1 - self.rms) * update_output**2)
         self.rms_hidden = (self.rms * self.rms_hidden) + ((1 - self.rms) * update_hidden**2)
-        # self.weights_output -= self.learning_rate * self.momentum_output
-        # self.weights_hidden -= self.learning_rate * self.momentum_hidden
-        self.weights_output -= self.learning_rate * (update_output / (np.sqrt(self.rms_output) + 1e-8))
-        self.weights_hidden -= self.learning_rate * (update_hidden / (np.sqrt(self.rms_hidden) + 1e-8))
+        corrected_rms_output = self.rms_output / (1 - (self.rms ** epoch))
+        corrected_rms_hidden = self.rms_hidden / (1 - (self.rms ** epoch))
 
-    def backPropagate(self, labels, softmax_output, output_wx, activated_first_wx, first_wx, data):
+        #Updating using Adam Optimizer
+        self.weights_output -= (self.learning_rate * (corrected_momentum_output / (np.sqrt(corrected_rms_output) + 1e-8)))
+        self.weights_hidden -= (self.learning_rate * (corrected_momentum_hidden / (np.sqrt(corrected_rms_hidden) + 1e-8)))
+
+    def backPropagate(self, labels, softmax_output, output_wx, activated_first_wx, first_wx, data, epoch):
         'Function to back propagate error and adjust weights'
 
         # cross_entropy_loss = -labels * np.log(softmax_output)           #visualize or remove
@@ -98,9 +104,9 @@ class DigitClassifier:
         error_hidden = ((self.weights_output).dot(error_output.T)).T * derivativeSigmoid(first_wx)
         update_hidden = data.T.dot(error_hidden)
 
-        self.update_weights(update_output, update_hidden)
+        self.update_weights(update_output, update_hidden, epoch)
 
-    def feedForward(self, batch, predict = True):
+    def feedForward(self, batch, predict = True, epoch = 1):
         'Function to compute the output at each layer'
 
         data = batch.loc[:, batch.columns != 'Label'] if not predict else batch
@@ -125,33 +131,33 @@ class DigitClassifier:
             return final_output
         else:
             accuracy = (final_output==batch['Label']).mean()
-            self.backPropagate(labels, softmax_output, output_wx, activated_first_wx, first_wx, data)
+            self.backPropagate(labels, softmax_output, output_wx, activated_first_wx, first_wx, data, epoch)
             return accuracy
 
     def train(self):
         'Function to train the network using training data'
-
-        shuffled_train_data = self.train_data.sample(frac=1)
-        batches = np.array_split(shuffled_train_data, (self.train_data.shape[0] + 1) / self.batch_size) if self.train_data.shape[0] > self.batch_size else [shuffled_train_data]
-        print('Training Data Segmented')
 
         avg_accuracies = []
         
         print('Training Started')
         for epoch in range(self.epochs):
 
+            #Splitting dataset into batches
+            shuffled_train_data = self.train_data.sample(frac=1)
+            batches = np.array_split(shuffled_train_data, (self.train_data.shape[0] + 1) / self.batch_size) if self.train_data.shape[0] > self.batch_size else [shuffled_train_data]
+
             accuracies = []
             for batch in range(len(batches)):
-                accuracies += [self.feedForward(batches[batch], predict=False)]
+                accuracies += [self.feedForward(batches[batch], predict=False, epoch = epoch + 1)]
             avg_accuracy = sum(accuracies)/len(accuracies) * 100
             print(f'Epoch {epoch + 1}: {avg_accuracy}%')
 
             #Early Stopping
-            # avg_accuracies += [avg_accuracy]
-            # if len(avg_accuracies) > 10:
-            #     x, y, z = avg_accuracies[-1], avg_accuracies[-2], avg_accuracies[-3]
-            #     if x > 93 and y > 93 and z > 93:
-            #         break
+            avg_accuracies += [avg_accuracy]
+            if len(avg_accuracies) > 10:
+                x, y, z = avg_accuracies[-1], avg_accuracies[-2], avg_accuracies[-3]
+                if x > 93.5 and y > 93.5 and z > 93.5:
+                    break
 
         print('Training Finished')
 
